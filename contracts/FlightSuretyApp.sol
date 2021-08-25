@@ -5,13 +5,13 @@ pragma solidity >=0.4.24;
 // OpenZeppelin's SafeMath library, when used correctly, protects agains such bugs
 // More info: https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2018/november/smart-contract-insecurity-bad-arithmetic/
 
-import "../node_modules/openzeppelin-solidity/contracts/utils/math/SafeMath.sol";
+// import "../node_modules/openzeppelin-solidity/contracts/utils/math/SafeMath.sol";
 
 /************************************************** */
 /* FlightSurety Smart Contract                      */
 /************************************************** */
 contract FlightSuretyApp {
-    using SafeMath for uint256; // Allow SafeMath functions to be called for all uint256 types (similar to "prototype" in Javascript)
+    // using SafeMath for uint256; // Allow SafeMath functions to be called for all uint256 types (similar to "prototype" in Javascript)
 
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
@@ -68,13 +68,37 @@ contract FlightSuretyApp {
     /*                                       CONSTRUCTOR                                        */
     /********************************************************************************************/
 
+    FlightSuretyDataAbstract flightSuretyData;
+    address flightSuretyDataAddress;
+    uint foo;
+
     /**
     * @dev Contract constructor
     *
     */
-    constructor()
+    constructor(address dataContract, address owner)
     {
-        contractOwner = msg.sender;
+        flightSuretyDataAddress = dataContract;
+        flightSuretyData = FlightSuretyDataAbstract(dataContract);
+        contractOwner = owner; //msg.sender;
+    }
+
+    // function setDataContract(address appContract, address dataContract) public
+    // {
+    //     // myVariable = x;
+    //     flightSuretyDataAddress = dataContract;
+    //     flightSuretyData = FlightSuretyDataAbstract(dataContract);
+    //     flightSuretyData.setContractOwner(appContract);
+    // }
+
+    function getDataContractAddress() view public returns(address)
+    {
+        return flightSuretyDataAddress;
+    }
+
+    function getDataContract() view public returns(FlightSuretyDataAbstract)
+    {
+        return flightSuretyData;
     }
 
     /********************************************************************************************/
@@ -82,11 +106,17 @@ contract FlightSuretyApp {
     /********************************************************************************************/
 
     function isOperational() 
-                            public 
-                            pure 
+                            public
+                            view
                             returns(bool) 
     {
-        return true;  // Modify to call data contract's status
+        return flightSuretyData.isOperational();  // Modify to call data contract's status
+    }
+
+    function setOperatingStatus(bool mode, address sender) external 
+    {
+        flightSuretyData.setOperatingStatus(mode, sender);
+
     }
 
     /********************************************************************************************/
@@ -108,18 +138,25 @@ contract FlightSuretyApp {
         return (success, 0);
     }
 
+    function fund(address airlineAddress)
+        public
+        payable
+    {
+        flightSuretyData.fund(airlineAddress, msg.value);
+    }
 
    /**
     * @dev Register a future flight for insuring.
     *
     */  
-    function registerFlight
-                                (
-                                )
-                                external
-                                pure
+    function registerFlight(
+        address airline,
+        string calldata flightId,
+        uint256 timestamp     
+    )
+        external
     {
-
+        flightSuretyData.registerFlight(airline, flightId, timestamp);
     }
     
    /**
@@ -159,6 +196,12 @@ contract FlightSuretyApp {
         emit OracleRequest(index, airline, flight, timestamp);
     } 
 
+    function buyInsurance(
+        address payable passenger,
+        string calldata flightId
+    )  external payable {
+        flightSuretyData.buy(passenger, flightId, msg.value);
+    }
 
 // region ORACLE MANAGEMENT
 
@@ -335,3 +378,31 @@ contract FlightSuretyApp {
 // endregion
 
 }   
+
+contract FlightSuretyDataAbstract {
+    // function setContractOwner(address owner) public {}
+    function isOperational() public view returns(bool) {}
+    function setOperatingStatus(bool mode, address sender) external {}
+    function registerAirline() external {}
+    function registerFlight(address airline, string calldata flightId, uint256 timestamp) external {}
+    function buy(address payable passenger, string calldata flightId, uint insuranceValue) external payable{}
+    function creditInsurees(string calldata flightId) external {}
+    function pay() external {}
+    function fund(address airlineAddress, uint funding) external payable {}
+}
+
+// contract FlightSuretyData {
+//     function setOperatingStatus(bool mode, address sender) external {}
+//     function isOperational() external view returns(bool) {}
+//     // function getActiveAirlines() external view returns(address[]){}
+//     function registerAirline(address airline, address owner) external {}
+//     function fund(address owner) public payable {}
+//     function buy(address passenger, string flight) public payable {}
+//     function creditInsurees(address passenger, string flight) external payable{}
+
+//     function isAirline(address airline) external view returns(bool){}
+//     function getAirlineOwnership(address airline) external view returns(uint256){}
+//     function registerFlight(address airline, string flightId, uint256 timestamp) external {}
+//     function setTestingMode(bool mode) external {}
+//     function flightSuretyInfo(address passenger, string flight) external returns(uint256){}
+// }

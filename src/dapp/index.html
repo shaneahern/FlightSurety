@@ -21,12 +21,38 @@
 
     <main class="container">
 
-        <div id="display-wrapper" class="top-20">
+        <div id="status-display-wrapper" class="top-20">
+        </div>
+
+        <div id="oracles-display-wrapper" class="top-20">
+        </div>
+
+        <div id="oracles-response-wrapper" class="top-20">
+        </div>
+
+        <div id="purchase-display-wrapper" class="top-20">
         </div>
         <div class="row top-20">
             <label class="form">Flight</label> <input type="text" id="flight-number"> <btn class="btn btn-primary" id="submit-oracle">Submit to Oracles</btn>
         </div>
+        <div class="row top-20">
+            <btn class="btn btn-primary" id="response-oracle">Check Oracles Response</btn>
+        </div>
     </main>
+
+    <div class="buy">
+        <div class="row top-20">
+            <label class="form">Buy Insurance for Flight #</label> <input type="text" id="flight-number-buy"> <btn class="btn btn-primary" id="submit-buy">Buy Insurance</btn>
+        </div>
+    </div>
+
+    <div class="buy">
+        <div class="row top-20">
+            <label class="form">Operating Status</label> <btn class="btn btn-primary" id="toggle-operating-status">Toggle</btn>
+        </div>
+    </div>
+
+
 
 </body>
 
