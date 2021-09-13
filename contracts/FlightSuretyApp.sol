@@ -5,13 +5,16 @@ pragma solidity >=0.4.24;
 // OpenZeppelin's SafeMath library, when used correctly, protects agains such bugs
 // More info: https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2018/november/smart-contract-insecurity-bad-arithmetic/
 
-// import "../node_modules/openzeppelin-solidity/contracts/utils/math/SafeMath.sol";
+import "../node_modules/openzeppelin-solidity/contracts/utils/math/SafeMath.sol";
 
 /************************************************** */
 /* FlightSurety Smart Contract                      */
 /************************************************** */
 contract FlightSuretyApp {
-    // using SafeMath for uint256; // Allow SafeMath functions to be called for all uint256 types (similar to "prototype" in Javascript)
+    using SafeMath for uint256; // Allow SafeMath functions to be called for all uint256 types (similar to "prototype" in Javascript)
+
+
+    event Refund(address payable passenger, uint refund);
 
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
@@ -25,7 +28,7 @@ contract FlightSuretyApp {
     uint8 private constant STATUS_CODE_LATE_TECHNICAL = 40;
     uint8 private constant STATUS_CODE_LATE_OTHER = 50;
 
-    address private contractOwner;          // Account used to deploy contract
+    address payable private contractOwner;          // Account used to deploy contract
 
     struct Flight {
         bool isRegistered;
@@ -76,20 +79,12 @@ contract FlightSuretyApp {
     * @dev Contract constructor
     *
     */
-    constructor(address dataContract, address owner)
+    constructor(address dataContract, address payable owner)
     {
         flightSuretyDataAddress = dataContract;
         flightSuretyData = FlightSuretyDataAbstract(dataContract);
         contractOwner = owner; //msg.sender;
     }
-
-    // function setDataContract(address appContract, address dataContract) public
-    // {
-    //     // myVariable = x;
-    //     flightSuretyDataAddress = dataContract;
-    //     flightSuretyData = FlightSuretyDataAbstract(dataContract);
-    //     flightSuretyData.setContractOwner(appContract);
-    // }
 
     function getDataContractAddress() view public returns(address)
     {
@@ -166,24 +161,36 @@ contract FlightSuretyApp {
     function processFlightStatus
                                 (
                                     address airline,
-                                    string memory flight,
+                                    string memory flightId,
                                     uint256 timestamp,
                                     uint8 statusCode
                                 )
                                 internal
-                                pure
     {
+        if (statusCode == STATUS_CODE_LATE_AIRLINE) {
+            flightSuretyData.creditInsurees(airline, flightId, timestamp);
+        }
     }
 
+    function getBalanceDue(address passenger) public view returns(uint256)
+    {
+        return flightSuretyData.getBalanceDue(passenger);
+    }
+    
+    function pay(address payable passenger) public payable
+    {
+        require(msg.sender == contractOwner);
+        uint256 balanceDue = flightSuretyData.getBalanceDue(passenger);
+        flightSuretyData.pay{value: balanceDue}(passenger);
+    }
 
     // Generate a request for oracles to fetch flight information
-    function fetchFlightStatus
-                        (
-                            address airline,
-                            string calldata flight,
-                            uint256 timestamp                            
-                        )
-                        external
+    function fetchFlightStatus(
+        address airline,
+        string calldata flight,
+        uint256 timestamp                            
+    )
+    external
     {
         uint8 index = getRandomIndex(msg.sender);
 
@@ -196,11 +203,31 @@ contract FlightSuretyApp {
         emit OracleRequest(index, airline, flight, timestamp);
     } 
 
-    function buyInsurance(
-        address payable passenger,
-        string calldata flightId
-    )  external payable {
-        flightSuretyData.buy(passenger, flightId, msg.value);
+    function buy(
+        address passenger,
+        address airline,
+        string memory flightId,
+        uint256 timestamp
+    )  
+    external 
+    payable 
+    {
+        // require(flightSuretyData.flightExists(flightId) == true);
+        uint256 insuranceValue = msg.value;
+        if (msg.value > 1 ether) {
+            contractOwner.transfer(1 ether);
+            payable(passenger).transfer(msg.value - 1 ether);
+            insuranceValue = 1 ether;
+        } else {
+            contractOwner.transfer(msg.value);
+        }
+        flightSuretyData.buy(
+            passenger,
+            airline,
+            flightId,
+            timestamp,
+            insuranceValue     
+        );
     }
 
 // region ORACLE MANAGEMENT
@@ -385,24 +412,20 @@ contract FlightSuretyDataAbstract {
     function setOperatingStatus(bool mode, address sender) external {}
     function registerAirline() external {}
     function registerFlight(address airline, string calldata flightId, uint256 timestamp) external {}
-    function buy(address payable passenger, string calldata flightId, uint insuranceValue) external payable{}
-    function creditInsurees(string calldata flightId) external {}
-    function pay() external {}
+    function flightExists(string calldata flightId) public view returns(bool) {}
+    function buy(
+        address passenger,
+        address airline,
+        string memory flightId,
+        uint256 timestamp,
+        uint256 insuranceValue 
+    ) external returns(bytes32) {}
+    function creditInsurees(
+        address airline,
+        string memory flightId,
+        uint256 timestamp
+    ) external {}
+    function getBalanceDue(address passenger) public view returns(uint256) {}
+    function pay(address passenger) public payable {}
     function fund(address airlineAddress, uint funding) external payable {}
 }
-
-// contract FlightSuretyData {
-//     function setOperatingStatus(bool mode, address sender) external {}
-//     function isOperational() external view returns(bool) {}
-//     // function getActiveAirlines() external view returns(address[]){}
-//     function registerAirline(address airline, address owner) external {}
-//     function fund(address owner) public payable {}
-//     function buy(address passenger, string flight) public payable {}
-//     function creditInsurees(address passenger, string flight) external payable{}
-
-//     function isAirline(address airline) external view returns(bool){}
-//     function getAirlineOwnership(address airline) external view returns(uint256){}
-//     function registerFlight(address airline, string flightId, uint256 timestamp) external {}
-//     function setTestingMode(bool mode) external {}
-//     function flightSuretyInfo(address passenger, string flight) external returns(uint256){}
-// }

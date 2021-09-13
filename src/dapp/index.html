@@ -21,6 +21,9 @@
 
     <main class="container">
 
+        <div id="flights-wrapper" class="top-20">
+        </div>
+
         <div id="status-display-wrapper" class="top-20">
         </div>
 
@@ -33,7 +36,11 @@
         <div id="purchase-display-wrapper" class="top-20">
         </div>
         <div class="row top-20">
-            <label class="form">Flight</label> <input type="text" id="flight-number"> <btn class="btn btn-primary" id="submit-oracle">Submit to Oracles</btn>
+            <label class="form">Flight</label> 
+            <select id="selectFlightForOracle">
+                <option>Choose a flight</option>
+            </select>
+            <btn class="btn btn-primary" id="submit-oracle">Submit to Oracles</btn>
         </div>
         <div class="row top-20">
             <btn class="btn btn-primary" id="response-oracle">Check Oracles Response</btn>
@@ -42,17 +49,26 @@
 
     <div class="buy">
         <div class="row top-20">
-            <label class="form">Buy Insurance for Flight #</label> <input type="text" id="flight-number-buy"> <btn class="btn btn-primary" id="submit-buy">Buy Insurance</btn>
+            <btn class="btn btn-primary" id="toggle-operating-status">Toggle Operating Status</btn>
+            &nbsp;&nbsp;
+            <btn class="btn btn-primary" id="load-flights">Load Flights</btn>
         </div>
-    </div>
-
-    <div class="buy">
         <div class="row top-20">
-            <label class="form">Operating Status</label> <btn class="btn btn-primary" id="toggle-operating-status">Toggle</btn>
+            <label class="form">Buy Insurance for Flight #</label> 
+            <select id="selectFlightForInsurance">
+                <option>Choose a flight</option>
+            </select>
+            <select id="selectPassenger">
+                <option>Choose a passenger</option>
+            </select>
+             <btn class="btn btn-primary" id="submit-buy">Buy Insurance</btn>
+        </div>
+        <div class="row top-20">         
+            <btn class="btn btn-primary" id="load-passenger-value">Load Passenger Value</btn>
+            &nbsp;&nbsp;
+            <btn class="btn btn-primary" id="withdraw">Withdraw Insurance Payout</btn>
         </div>
     </div>
-
-
 
 </body>
 

@@ -19,6 +19,7 @@ let STATUS_CODES = {
 (async() => {
 
     let result = null;
+    let flightLookup = {};
 
     let contract = new Contract('localhost', () => {
 
@@ -26,29 +27,37 @@ let STATUS_CODES = {
 
         // User-submitted transaction
         DOM.elid('submit-oracle').addEventListener('click', () => {
-            let flight = DOM.elid('flight-number').value;
+            let flightId = DOM.elid('selectFlightForOracle').value;
+            let flight = flightLookup[flightId];
             // Write transaction
-            contract.fetchFlightStatus(flight, (error, result) => {
+            contract.fetchFlightStatus(flight.airline, flight.flight, flight.timestamp, (error, result) => {
                 displayOracles('Oracles', 'Trigger oracles', [ { label: 'Fetch Flight Status', error: error, value: result.flight + ' ' + result.timestamp} ]);
             });
         })
 
         DOM.elid('response-oracle').addEventListener('click', () => {
-            let flight = DOM.elid('flight-number').value;
-            contract.checkOracleResponse(flight, (result) => {
+            let flightId = DOM.elid('selectFlightForOracle').value;
+            let passenger = DOM.elid('selectPassenger').value;
+            contract.checkOracleResponse(flightId, (result) => {
                 var resultStr = "None";
                 if (result) {
                     resultStr = result.flight + ' ' + result.timestamp + ' ' + STATUS_CODES[result.status];
                 }
                 displayOracleResponse('Oracle Response', 'FlightStatusInfo event', [ { label: 'Oracle Response:', value: resultStr } ]);
+                if (passenger) {
+                    contract.getPassengerInsuranceValue(passenger, (error, result) => {     
+                        console.log(error, result);
+                    });
+                }
             });
         })
 
         DOM.elid('submit-buy').addEventListener('click', () => {
-            let flight = DOM.elid('flight-number-buy').value;
-            // Write transaction
-            console.log(contract);
-            contract.buyInsurance(flight, (error, result) => {
+            let flightId = DOM.elid('selectFlightForInsurance').value;
+            let passenger = DOM.elid('selectPassenger').value;
+            let flight = flightLookup[flightId];
+            console.log("flight", flight.airline, flight.flight, flight.timestamp);
+            contract.buyInsurance(passenger, flight.airline, flight.flight, flight.timestamp, (error, result) => {
                 console.log("error", error);
                 console.log("result", result);
                 displayPurchase('Buy', 'Buy Insurance', [ { label: 'Buy Insurance Status', error: error, value: result.flight + ' ' + result.timestamp} ]);
@@ -62,22 +71,48 @@ let STATUS_CODES = {
                 checkOperatingStatus(contract);
             });
         })
-    
-    });
-    
 
+        DOM.elid('load-flights').addEventListener('click', () => {
+            let flights = contract.getFlights();
+            let flightInfo = [];
+            for (var flightId in flights) {
+                const flight = flights[flightId];
+                flightLookup[flightId] = flight;
+                flightInfo.push({label: flightId, value: "Airline: " + flight.airline + " time: " + flight.timestamp + " status: " + flight.status});
+            }
+            displayFlights("Flights", "Available Flights", flightInfo)
+        })
+
+        DOM.elid('load-passenger-value').addEventListener('click', () => {
+            let passengerAddress = DOM.elid('selectPassenger').value;
+            contract.getPassengerInsuranceValue(passengerAddress, (error, result) => {     
+                console.log(error, result);
+            });
+        })
+
+        DOM.elid('withdraw').addEventListener('click', () => {
+            let passengerAddress = DOM.elid('selectPassenger').value;
+            contract.withdrawCredit(passengerAddress, (error, result) => {     
+                console.log(error, result);
+            });
+        })
+    });
 })();
 
 function checkOperatingStatus(contract) {
     // Read transaction
     contract.isOperational((error, result) => {
-        console.log("isOperational", error, typeof(result), result.toString());
+        console.log("isOperational", error, typeof(result), result);
         if (error) {
             console.log("isOperational error", error);
         }
         displayStatus('Operational Status', 'Check if contract is operational', [ { label: 'Operational Status', error: error, value: result} ]);
         operatingStatus = result;
     });
+}
+
+function displayFlights(title, description, results) {
+    display("flights-wrapper", title, description, results);
 }
 
 function displayPurchase(title, description, results) {

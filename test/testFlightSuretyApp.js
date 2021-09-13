@@ -18,14 +18,56 @@ contract('FlightSuretyApp', function(accounts) {
     const passengerAddress1 = accounts[6];
     const passengerAddress2 = accounts[7];
 
+
+    const ts101 = new Date(2021, 12, 24, 10, 30);
+    const ts102 = new Date(2021, 12, 24, 11, 30);
+    const ts103 = new Date(2021, 12, 24, 12, 30);
+    const ts201 = new Date(2021, 12, 26, 10, 30);
+    const ts202 = new Date(2021, 12, 26, 11, 30);
+    const ts203 = new Date(2021, 12, 26, 12, 30);
+
     let flightSuretyData;
     let flightSuretyApp;
     let firstAirline;
     let secondAirline;
-    
 
+    async function testBuyInsurance(passenger, airline, flightId, timestamp, ethValue) {
+        const txResult = await flightSuretyApp.buy(
+            passenger,
+            airline,
+            flightId,
+            timestamp,            
+            {from: passenger, value: web3.utils.toWei(ethValue, "ether")},
+        );
+        const tx = await web3.eth.getTransaction(txResult.tx);
+        assert(tx.value === web3.utils.toWei(ethValue, "ether"), "Transaction failed");
+    }
+
+    async function testWithdraw(passenger, expectedEthValue) {
+        const balanceDue = await flightSuretyApp.getBalanceDue(passenger);  
+        const txResult = await flightSuretyApp.pay(
+            passenger,   
+            {from: contractOwnerAddress, value: balanceDue.toString(10)});
+        const tx = await web3.eth.getTransaction(txResult.tx);
+        console.log(tx)
+        console.log(tx.value, web3.utils.toWei(expectedEthValue, "ether"))
+        assert(tx.value === web3.utils.toWei(expectedEthValue, "ether"), "Transaction failed");
+    }
+
+    async function testGetPassenger(
+        passengerAddress,
+        expectedPassengerAddress,
+        expectedInsuranceEthValue,
+        expectedPayoutCreditEthValue,
+    ) {
+        const passenger = await flightSuretyData.getPassenger(passengerAddress);
+        assert(passenger.passengerAddress === expectedPassengerAddress);
+        assert(passenger.insuranceValue === web3.utils.toWei(expectedInsuranceEthValue, "ether"), "Invalid insurance value");
+        assert(passenger.payoutCredit === web3.utils.toWei(expectedPayoutCreditEthValue, "ether"), "Invalid payout credit " + passenger.payoutCredit + " expected " + web3.utils.toWei(expectedPayoutCreditEthValue, "ether"));
+    }
+    
     // 1st Test
-    it("Deploys successfully and adds airlines", async() => {
+    it("First airline is registered when contract is deployed", async() => {
 
         flightSuretyData = await FlightSuretyData.deployed(firstAirlineAddress, {from: contractOwnerAddress});
         flightSuretyApp = await FlightSuretyApp.deployed(flightSuretyData.address, {from: contractOwnerAddress});
@@ -34,14 +76,14 @@ contract('FlightSuretyApp', function(accounts) {
 
         assert.strictEqual(dataContractAddress, flightSuretyData.address, "Data contact address not set");        
     });
-    
+
     it("Sets operating status to true", async() => {
         assert(await flightSuretyApp.isOperational() === false, "Should start as isOperational = false");
         await flightSuretyApp.setOperatingStatus(true, contractOwnerAddress);
         assert(await flightSuretyApp.isOperational() === true, "isOperational should be true after set");
     });
 
-    it("Registers airlines, enforces consensus rules", async() => {
+    it("Only existing airline may register a new airline until there are at least four airlines registered", async() => {
         firstAirline = await flightSuretyData.getAirline(firstAirlineAddress);   
         assert.strictEqual(firstAirline.airlineAddress, firstAirlineAddress, "First airline not registered");
 
@@ -55,7 +97,7 @@ contract('FlightSuretyApp', function(accounts) {
         try {
             await flightSuretyData.registerAirline(approvingAirlines, secondAirlineAddress);
         }  catch(error) {
-            assert.strictEqual(error.reason, 'Airline not registered', "Approving airline not registered");
+            assert.strictEqual(error.reason, 'Airline not registered', "Didn't get expected error on register airline without existing airline");
         }
         approvingAirlines = [firstAirlineAddress];
         await flightSuretyData.registerAirline(approvingAirlines, secondAirlineAddress);
@@ -71,9 +113,11 @@ contract('FlightSuretyApp', function(accounts) {
         await flightSuretyData.registerAirline(approvingAirlines, fourthAirlineAddress);
         const fourthAirline = await flightSuretyData.getAirline(fourthAirlineAddress);   
         assert.strictEqual(fourthAirline.airlineAddress, fourthAirlineAddress, "Fourth airline not registered");
+        // Now have 4 airlines, now require 50% of exisiting airlines to approve    
+    });
 
-        // Now have 4 airlines, now require 50% of exisiting airlines to approve
-
+    it("Registration of fifth and subsequent airlines requires multi-party consensus of 50% of registered airlines", async() => {
+    
         // Only 1 of 5 airlines approving (20%), should fail
         approvingAirlines = [fourthAirlineAddress];
         try {
@@ -86,12 +130,10 @@ contract('FlightSuretyApp', function(accounts) {
         approvingAirlines = [thirdAirlineAddress, fourthAirlineAddress];
         await flightSuretyData.registerAirline(approvingAirlines, fifthAirlineAddress);
         const fifthAirline = await flightSuretyData.getAirline(fifthAirlineAddress);   
-        assert.strictEqual(fifthAirline.airlineAddress, fifthAirlineAddress, "Fifth airline not registered");
-
+        assert.strictEqual(fifthAirline.airlineAddress, fifthAirlineAddress, "Fifth airline failed to register with 50% consensus");
     });
 
-
-    it("Only funded airlines are valid", async() => {
+    it("Airline can be registered, but does not participate in contract until it submits funding of 10 ether", async() => {
 
         try {
             await flightSuretyData.getValidAirline(firstAirlineAddress);   
@@ -100,7 +142,7 @@ contract('FlightSuretyApp', function(accounts) {
         }
 
         assert(firstAirline.funding === web3.utils.toWei("0", "ether"), "Airline funding should be 0 ETH");
-        await flightSuretyData.fund(firstAirline.airlineAddress, {from: firstAirline.airlineAddress, value: web3.utils.toWei("10", "ether")});
+        await flightSuretyApp.fund(firstAirline.airlineAddress, {from: firstAirline.airlineAddress, value: web3.utils.toWei("10", "ether")});
         const fundedFirstAirline = await flightSuretyData.getAirline(firstAirline.airlineAddress);   
         assert.strictEqual(fundedFirstAirline.funding, web3.utils.toWei("10", "ether"), "Airline funding not set to 10 eth");
         const fundedValidFirstAirline = await flightSuretyData.getValidAirline(firstAirline.airlineAddress); 
@@ -111,18 +153,21 @@ contract('FlightSuretyApp', function(accounts) {
 
 
     it("Adds flights to funded airline", async() => {
-        
-        const ts = Date.now();
-        await flightSuretyApp.registerFlight(firstAirline.airlineAddress, "101", ts)
-        await flightSuretyApp.registerFlight(firstAirline.airlineAddress, "102", ts)
-        await flightSuretyApp.registerFlight(firstAirline.airlineAddress, "103", ts)
+        await flightSuretyApp.registerFlight(firstAirline.airlineAddress, "101", ts101.getTime())
+        await flightSuretyApp.registerFlight(firstAirline.airlineAddress, "102", ts102.getTime())
+        await flightSuretyApp.registerFlight(firstAirline.airlineAddress, "103", ts103.getTime())
+        const flight101 = await flightSuretyData.getFlight("101");
+        const flight102 = await flightSuretyData.getFlight("102");
+        const flight103 = await flightSuretyData.getFlight("103");
+        assert(flight101.flightId === "101");
+        assert(flight102.flightId === "102");
+        assert(flight103.flightId === "103");
     });
 
 
     it("Adds flights to unfunded airline", async() => {
-        const ts = Date.now();
         try {
-            await flightSuretyApp.registerFlight(secondAirline.airlineAddress, "201", ts)
+            await flightSuretyApp.registerFlight(secondAirline.airlineAddress, "201", ts201.getTime())
          }  catch(error) {
             assert(JSON.stringify(error.data).includes("Airline not at minimum funding"), error);
         }
@@ -130,15 +175,14 @@ contract('FlightSuretyApp', function(accounts) {
 
 
     it("Fund unfunded airline and add flights", async() => {
-        const ts = Date.now();
         let airline2 = await flightSuretyData.getAirline(secondAirline.airlineAddress);
         assert(airline2.funding === web3.utils.toWei("0", "ether"))
-        await flightSuretyData.fund(secondAirline.airlineAddress, {from: secondAirline.airlineAddress, value: web3.utils.toWei("10", "ether")});
+        await flightSuretyApp.fund(secondAirline.airlineAddress, {from: secondAirline.airlineAddress, value: web3.utils.toWei("10", "ether")});
         airline2 = await flightSuretyData.getAirline(secondAirline.airlineAddress);
         assert(airline2.funding === web3.utils.toWei("10", "ether"))
-        await flightSuretyApp.registerFlight(secondAirline.airlineAddress, "201", ts)
-        await flightSuretyApp.registerFlight(secondAirline.airlineAddress, "202", ts)
-        await flightSuretyApp.registerFlight(secondAirline.airlineAddress, "203", ts)
+        await flightSuretyApp.registerFlight(secondAirline.airlineAddress, "201", ts201.getTime())
+        await flightSuretyApp.registerFlight(secondAirline.airlineAddress, "202", ts202.getTime())
+        await flightSuretyApp.registerFlight(secondAirline.airlineAddress, "203", ts203.getTime())
         const flight201 = await flightSuretyData.getFlight("201");
         const flight202 = await flightSuretyData.getFlight("202");
         const flight203 = await flightSuretyData.getFlight("203");
@@ -148,57 +192,124 @@ contract('FlightSuretyApp', function(accounts) {
 
     });
 
-    it("Passenger may purchase insurance", async() => {
-        await flightSuretyApp.buyInsurance(passengerAddress1, "101", {from: passengerAddress1, value: web3.utils.toWei("1", "ether")});
-        await flightSuretyApp.buyInsurance(passengerAddress2, "101", {from: passengerAddress2, value: web3.utils.toWei("0.5", "ether")});
-        await flightSuretyApp.buyInsurance(passengerAddress1, "201", {from: passengerAddress1, value: web3.utils.toWei("1", "ether")});
-        await flightSuretyApp.buyInsurance(passengerAddress2, "201", {from: passengerAddress2, value: web3.utils.toWei("0.5", "ether")});
-        const flight1 = await flightSuretyData.getFlight("101");
-        const flight2 = await flightSuretyData.getFlight("201");
-        assert(flight1.flightId === "101");
-        assert(flight1.passengers[0].passenger === passengerAddress1);
-        assert(flight1.passengers[0].insuranceValue === web3.utils.toWei("1", "ether"), flight1.passengers[0].insuranceValue);
-        assert(flight1.passengers[1].passenger === passengerAddress2);
-        assert(flight1.passengers[1].insuranceValue === web3.utils.toWei("0.5", "ether"), flight1.passengers[0].insuranceValue);
-        assert(flight2.flightId === "201");
-        assert(flight2.passengers[0].passenger === passengerAddress1);
-        assert(flight2.passengers[0].insuranceValue === web3.utils.toWei("1", "ether"));
-        assert(flight2.passengers[1].passenger === passengerAddress2);
-        assert(flight2.passengers[1].insuranceValue === web3.utils.toWei("0.5", "ether"));
+    it("Passengers may pay up to 1 ether for purchasing flight insurance", async() => {
+        const insuranceValueEth1 = "1";
+        const insuranceValueEth2 = "0.5";
+
+        await testBuyInsurance(passengerAddress1, firstAirline.airlineAddress, "101", ts101.getTime(), insuranceValueEth1);
+        await testBuyInsurance(passengerAddress2, firstAirline.airlineAddress, "101", ts101.getTime(), insuranceValueEth2);
+
+        const flightPassengers = await flightSuretyData.getFlightPassengers(
+            firstAirline.airlineAddress,
+            "101",
+            ts101.getTime()
+        );
+        await testGetPassenger(
+            flightPassengers[0],
+            passengerAddress1,
+            insuranceValueEth1,
+            "0",
+        );
+        await testGetPassenger(
+            flightPassengers[1],
+            passengerAddress2,
+            insuranceValueEth2,
+            "0",
+        );
     });
 
     it("Passenger may purchase max 1 ether insurance, over amount refunded", async() => {
-        // const beforeBal = await web3.eth.getBalance(passengerAddress1);
-        let tx = await flightSuretyApp.buyInsurance(passengerAddress1, "202", {from: passengerAddress1, value: web3.utils.toWei("1.5", "ether")}).then(
-            (res) => {
-                console.log(res);
-                web3.eth.getTransaction(res.tx).then(console.log);
-            }
+        const insuranceValueEthRequested = "1.5";
+        const expectedInsuranceValueEth = "1";
+        
+        await testBuyInsurance(passengerAddress1, secondAirline.airlineAddress, "201", ts201.getTime(), insuranceValueEthRequested);
+
+        const flightPassengers = await flightSuretyData.getFlightPassengers(
+            secondAirline.airlineAddress,
+            "201",
+            ts201.getTime()
         );
-        // truffleAssert.eventEmitted(tx, 'Refund', (ev) => {
-        //     return ev.passenger === passengerAddress1 && ev.refund === web3.utils.toWei("0.5", "ether");
-        // });
-        // const afterBal = await web3.eth.getBalance(passengerAddress1);
-        const flight3 = await flightSuretyData.getFlight("202");
-        assert(flight3.passengers[0].passenger === passengerAddress1);
-        assert(flight3.passengers[0].insuranceValue === web3.utils.toWei("1", "ether"));
+        await testGetPassenger(
+            flightPassengers[0],
+            passengerAddress1,
+            expectedInsuranceValueEth,
+            "0",
+        );
     });
 
 
-    it("Credit insureess for flight", async() => {
-        await flightSuretyData.creditInsurees("101");
-        const flight1 = await flightSuretyData.getFlight("101");
-        assert(flight1.passengers[0].payoutCredit === web3.utils.toWei("1.5", "ether"));
-        assert(flight1.passengers[1].payoutCredit === web3.utils.toWei("0.75", "ether"));
+    it("Passenger may not purchase insurance for non-existent flight", async() => {
+        var exceptionCaught = false;
+        try{
+            await flightSuretyApp.buy(
+                passengerAddress1,
+                firstAirline.airlineAddress,
+                "999",
+                Date.now(),            
+                {from: passengerAddress1, value: web3.utils.toWei("1", "ether")},
+            );
+          }
+          catch(e){
+            console.log(e);
+            exceptionCaught = true;
+          }
+        assert(exceptionCaught, "Did not have expected exception");
+    });
 
-        await flightSuretyData.creditInsurees("201");
-        const flight2 = await flightSuretyData.getFlight("201");
-        assert(flight2.passengers[0].payoutCredit === web3.utils.toWei("1.5", "ether"));
-        assert(flight2.passengers[1].payoutCredit === web3.utils.toWei("0.75", "ether"));
+    it("If flight is delayed due to airline fault, passenger receives credit of 1.5X the amount they paid ", async() => {
+        const expectedInsuranceValueEth1 = "1";
+        const expectedPayoutCreditEth1 = "1.5";
+        const expectedInsuranceValueEth2 = "0.5";
+        const expectedPayoutCreditEth2 = "0.75";
+        const expectedInsuranceValueEth3 = "1";
+        const expectedPayoutCreditEth3 = "1.5";
+        
+        await flightSuretyData.creditInsurees(            
+            firstAirline.airlineAddress,
+            "101",
+            ts101.getTime(),   
+        );
+        const flightPassengers101 = await flightSuretyData.getFlightPassengers(
+            firstAirline.airlineAddress,
+            "101",
+            ts101.getTime()
+        );
+        await testGetPassenger(
+            flightPassengers101[0],
+            passengerAddress1,
+            expectedInsuranceValueEth1,
+            expectedPayoutCreditEth1,
+        );
+        await testGetPassenger(
+            flightPassengers101[1],
+            passengerAddress2,
+            expectedInsuranceValueEth2,
+            expectedPayoutCreditEth2,
+        );
 
-        await flightSuretyData.creditInsurees("202");
-        const flight3 = await flightSuretyData.getFlight("201");
-        assert(flight3.passengers[0].payoutCredit === web3.utils.toWei("1.5", "ether"));
+        const balanceDue1 = await flightSuretyApp.getBalanceDue(flightPassengers101[0]);
+        assert(balanceDue1.toString(10) === web3.utils.toWei(expectedPayoutCreditEth1, "ether"), "payoutCredit not set correctly");
+        const balanceDue2 = await flightSuretyApp.getBalanceDue(flightPassengers101[1]);
+        assert(balanceDue2.toString(10) == web3.utils.toWei(expectedPayoutCreditEth2, "ether"), "payoutCredit not set correctly");
+        
+
+        const flightPassengers201 = await flightSuretyData.getFlightPassengers(
+            secondAirline.airlineAddress,
+            "201",
+            ts201.getTime()
+        );
+        // same passenger1 on different flight
+        await testGetPassenger(
+            flightPassengers201[0],
+            passengerAddress1,
+            expectedInsuranceValueEth3,
+            expectedPayoutCreditEth3,
+        );
+
+        await testWithdraw(passengerAddress1, expectedPayoutCreditEth1);
+        await testWithdraw(passengerAddress2, expectedPayoutCreditEth2);
+        // passenger 1 already withdrew balance
+        await testWithdraw(passengerAddress1, "0");
     });
 
 });

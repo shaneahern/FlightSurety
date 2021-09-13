@@ -6,8 +6,6 @@ pragma solidity >=0.4.24;
 contract FlightSuretyData {
     // using SafeMath for uint256;
 
-    event Refund(address payable passenger, uint refund);
-
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
     /********************************************************************************************/
@@ -32,19 +30,27 @@ contract FlightSuretyData {
         address airline;
         string flightId;
         uint256 timestamp;  
-        Passenger[] passengers;   
+        uint passengersSize;
     }
     mapping(string => Flight) private flights;
 
-
+    mapping(bytes32 => address[]) private flightPassengers;
 
     struct Passenger {    
-        address passenger;
+        address passengerAddress;
         string flightId;
-        uint insuranceValue;
-        uint payoutCredit;
+        uint256 insuranceValue; 
+        uint256 payoutCredit;   
     }
-    // mapping(string => Passenger) private passengers;
+    mapping(address => Passenger) private passengers;
+
+    struct PassengerTest {    
+        string flightId;
+        uint256 insuranceValue; 
+        uint256 payoutCredit;   
+    }
+    mapping(string => PassengerTest) private passengersTest;
+
 
 
     /**
@@ -204,54 +210,128 @@ contract FlightSuretyData {
         return airlines[airlineAddress];
     }
 
-
    /**
     * @dev Buy insurance for a flight
     *
     */   
     function buy(
-        address payable passenger,
-        string calldata flightId,
-        uint insuranceValue
+        address passenger,
+        address airline,
+        string memory flightId,
+        uint256 timestamp,
+        uint256 insuranceValue     
     )
         external
-        payable
         requireIsOperational() 
+        returns(bytes32)
     {
+        bytes32 flightKey = getFlightKey(airline, flightId, timestamp);
+        passengers[passenger].passengerAddress = passenger;
+        passengers[passenger].flightId = flightId;
+        passengers[passenger].insuranceValue = insuranceValue;
+        passengers[passenger].payoutCredit = 0;
+        flightPassengers[flightKey].push(passenger);
+
         Flight storage flight = flights[flightId];
-        if (insuranceValue > 1 ether) {
-            uint amountToReturn = insuranceValue - 1 ether;
-            insuranceValue = 1 ether;
-            passenger.transfer(amountToReturn);
-            emit Refund(passenger, amountToReturn);
-        }
-        flight.passengers.push(Passenger(passenger, flightId, insuranceValue, 0));
+        flight.passengersSize++;
+        return flightKey;
     }
+
+
+    function getFlightPassengers(
+        address airline,
+        string memory flightId,
+        uint256 timestamp
+    )
+        public
+        view
+        requireIsOperational() 
+        returns(address[] memory)
+    {
+        bytes32 flightKey = getFlightKey(airline, flightId, timestamp);
+        return flightPassengers[flightKey];
+    }
+
+
+    function getPassenger(
+        address passenger
+    )
+        public
+        view
+        requireIsOperational() 
+        returns(Passenger memory)
+    {
+        return passengers[passenger];
+    }
+
+    function getInsuranceValueForPassenger(address passenger)
+        external
+        view
+        returns(uint256)
+    {
+        
+        Passenger storage p = passengers[passenger];
+        return p.insuranceValue;
+    }
+
+    function getPayoutCreditForPassenger(address passenger)
+        external
+        view
+        returns(uint256)
+    {
+        Passenger storage p = passengers[passenger];
+        return p.payoutCredit;
+    }
+
 
     /**
      *  @dev Credits payouts to insurees
     */
-    function creditInsurees(string calldata flightId)
+    function creditInsurees(
+        address airline,
+        string memory flightId,
+        uint256 timestamp
+    )
         external
     {
-        Flight storage flight = flights[flightId];
-        for (uint i=0; i < flight.passengers.length; i++) {
-            Passenger storage p = flight.passengers[i];
+        bytes32 flightKey = getFlightKey(airline, flightId, timestamp);
+        address[] memory passengersForFlight = flightPassengers[flightKey];
+        for (uint i=0; i < passengersForFlight.length; i++) {
+            Passenger storage p = passengers[passengersForFlight[i]];
             p.payoutCredit = p.insuranceValue + (p.insuranceValue / 2);
         }
     }
     
+    function getBalanceDue(address passenger) public view returns(uint256) {
+        Passenger storage p = passengers[passenger];
+        if (p.passengerAddress == passenger && p.payoutCredit > 0) {
+            return p.payoutCredit;
+        }
+        return 0;
+    }
+
+
+    bool locked = false;
 
     /**
      *  @dev Transfers eligible payout funds to insuree
      *
     */
-    function pay
-                            (
-                            )
-                            external
-                            pure
+    function pay(
+        address payable passenger
+    )
+         public payable
     {
+        // require(msg.sender == contractOwner);
+        require(!locked, "Reentrant call detected!");
+        locked = true;
+        Passenger storage p = passengers[passenger];
+        if (p.passengerAddress == passenger && p.payoutCredit > 0) {
+            uint256 payoutCredit = p.payoutCredit;
+            p.payoutCredit = 0;
+            passenger.transfer(payoutCredit);
+        }
+        locked = false;
     }
 
    /**
@@ -287,8 +367,13 @@ contract FlightSuretyData {
         flight.airline = airline;
         flight.flightId = flightId;
         flight.timestamp = timestamp;
+        flight.passengersSize = 0;
     }
 
+    function flightExists(string calldata flightId) public view returns(bool)
+    {
+        return flights[flightId].airline != address(0);
+    }
 
     function getFlight(string calldata flightId) public view returns(Flight memory)
     {
