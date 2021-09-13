@@ -212,7 +212,7 @@ contract FlightSuretyApp {
     external 
     payable 
     {
-        // require(flightSuretyData.flightExists(flightId) == true);
+        require(flightSuretyData.flightExists(flightId) == true);
         uint256 insuranceValue = msg.value;
         if (msg.value > 1 ether) {
             contractOwner.transfer(1 ether);
