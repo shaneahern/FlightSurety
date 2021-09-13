@@ -17,8 +17,6 @@ let STATUS_CODES = {
 
 
 (async() => {
-
-    let result = null;
     let flightLookup = {};
 
     let contract = new Contract('localhost', () => {
@@ -27,7 +25,7 @@ let STATUS_CODES = {
 
         // User-submitted transaction
         DOM.elid('submit-oracle').addEventListener('click', () => {
-            let flightId = DOM.elid('selectFlightForOracle').value;
+            let flightId = DOM.elid('selectFlight').value;
             let flight = flightLookup[flightId];
             // Write transaction
             contract.fetchFlightStatus(flight.airline, flight.flight, flight.timestamp, (error, result) => {
@@ -36,7 +34,7 @@ let STATUS_CODES = {
         })
 
         DOM.elid('response-oracle').addEventListener('click', () => {
-            let flightId = DOM.elid('selectFlightForOracle').value;
+            let flightId = DOM.elid('selectFlight').value;
             let passenger = DOM.elid('selectPassenger').value;
             contract.checkOracleResponse(flightId, (result) => {
                 var resultStr = "None";
@@ -53,11 +51,13 @@ let STATUS_CODES = {
         })
 
         DOM.elid('submit-buy').addEventListener('click', () => {
-            let flightId = DOM.elid('selectFlightForInsurance').value;
+            let flightId = DOM.elid('selectFlight').value;
             let passenger = DOM.elid('selectPassenger').value;
             let flight = flightLookup[flightId];
+            let insuranceAmt = DOM.elid('insurance-amt-eth').value;
             console.log("flight", flight.airline, flight.flight, flight.timestamp);
-            contract.buyInsurance(passenger, flight.airline, flight.flight, flight.timestamp, (error, result) => {
+            console.log("insurance amount", insuranceAmt)
+            contract.buyInsurance(passenger, flight.airline, flight.flight, flight.timestamp, insuranceAmt, (error, result) => {
                 console.log("error", error);
                 console.log("result", result);
                 displayPurchase('Buy', 'Buy Insurance', [ { label: 'Buy Insurance Status', error: error, value: result.flight + ' ' + result.timestamp} ]);

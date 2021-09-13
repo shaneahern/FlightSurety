@@ -126,8 +126,7 @@ export default class Contract {
             this.flights[103] = {airline: airline, flight: "103", timestamp: this.ts103.getTime(), status: 0};
         }).then(result => {
             let flightIds =  Object.keys(this.flights);
-            this.createSelectMenu(flightIds, "selectFlightForOracle" );
-            this.createSelectMenu(flightIds, "selectFlightForInsurance" );
+            this.createSelectMenu(flightIds, "selectFlight" );
         });
     }
 
@@ -190,8 +189,7 @@ export default class Contract {
     }
 
     // Passengers may pay up to 1 ether for purchasing flight insurance.
-    buyInsurance(passenger, airline, flightId, timestamp, callback) {
-        let insuranceAmount = "1.0";
+    buyInsurance(passenger, airline, flightId, timestamp, insuranceAmount, callback) {
         console.log("passenger", passenger, "value", this.web3.utils.toWei(insuranceAmount, "ether"));
         this.flightSuretyApp.methods.buy(
             passenger,

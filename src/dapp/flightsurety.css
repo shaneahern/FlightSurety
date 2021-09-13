@@ -5,13 +5,14 @@ body {
 }
 
 .container {
-    margin-top: 400px;
+    margin-top: 40px;
     background-color: #000;
     opacity: 0.9;
     color: #fff;
     padding: 40px;
 }
 .buy {
+    margin-top: 40px;
     padding: 40px;
 }
 
